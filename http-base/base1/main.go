@@ -8,7 +8,7 @@ import (
 
 func main() {
 	http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/hellp", helloHandle)
+	http.HandleFunc("/hello", helloHandle)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
