@@ -2,8 +2,20 @@ package main
 
 import (
 	"gee"
+	"log"
 	"net/http"
+	"time"
 )
+
+func Only4V2() gee.HandlerFunc {
+	return func(c *gee.Context) {
+		t := time.Now()
+		// if a server error occurred
+		c.Fail(500, "Internal Server Error")
+		// Calculate resolution time
+		log.Printf("[%d] %s in %v for group v2", c.StatusCode, c.Req.RequestURI, time.Since(t))
+	}
+}
 
 func main() {
 	r := gee.New()

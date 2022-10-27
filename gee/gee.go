@@ -3,15 +3,17 @@ package gee
 import (
 	"log"
 	"net/http"
+	"path"
+	"strings"
 )
 
 type HandlerFunc func(*Context)
 
 type RouterGroup struct {
-	prefix     string
-	middleware []HandlerFunc
-	parent     *RouterGroup
-	engine     *Engine
+	prefix      string
+	middlewares []HandlerFunc
+	parent      *RouterGroup
+	engine      *Engine
 }
 
 type Engine struct {
@@ -25,6 +27,10 @@ func New() *Engine {
 	engine.RouterGroup = &RouterGroup{engine: engine}
 	engine.groups = []*RouterGroup{engine.RouterGroup}
 	return engine
+}
+
+func (group *RouterGroup) Use(middleware ...HandlerFunc) {
+	group.middlewares = append(group.middlewares, middleware...)
 }
 
 func (group *RouterGroup) Group(prefix string) *RouterGroup {
@@ -57,6 +63,33 @@ func (engine *Engine) Run(addr string) (err error) {
 }
 
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var middlewares []HandlerFunc
+	for _, group := range engine.groups {
+		if strings.HasPrefix(req.URL.Path, group.prefix) {
+			middlewares = append(middlewares, group.middlewares...)
+		}
+	}
 	c := newContext(w, req)
+	c.handlers = middlewares
+	c.engine = engine
 	engine.router.handle(c)
+}
+
+func (group *RouterGroup) createStaticHandler(realpath string, fs http.FileSystem) HandlerFunc {
+	absolutePath := path.Join(group.prefix, realpath)
+	fileServer := http.StripPrefix(absolutePath, http.FileServer(fs))
+	return func(context *Context) {
+		file := context.Param("filepath")
+		if _, err := fs.Open(file); err != nil {
+			context.Status(http.StatusNotFound)
+			return
+		}
+		fileServer.ServeHTTP(context.Writer, context.Req)
+	}
+}
+
+func (group *RouterGroup) Static(relativePath string, root string) {
+	handler := group.createStaticHandler(relativePath, http.Dir(root))
+	urlPattern := path.Join(relativePath, "/*filePath")
+	group.GET(urlPattern, handler)
 }

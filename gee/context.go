@@ -15,7 +15,17 @@ type Context struct {
 	Method     string
 	Params     map[string]string
 	StatusCode int
+	handlers   []HandlerFunc
+	index      int
+	engine     *Engine
 }
+
+//index是记录当前执行到第几个中间件，
+//当在中间件中调用Next方法时，控制权交给了下一个中间件，
+//直到调用到最后一个中间件，然后再从后往前，
+//调用每个中间件在Next方法之后定义的部分。
+//如果我们将用户在映射路由时定义的Handler添加到c.handlers列表中，
+//结果会怎么样呢？想必你已经猜到了。
 
 func newContext(w http.ResponseWriter, req *http.Request) *Context {
 	return &Context{
@@ -23,6 +33,15 @@ func newContext(w http.ResponseWriter, req *http.Request) *Context {
 		Req:    req,
 		Path:   req.URL.Path,
 		Method: req.Method,
+		index:  -1,
+	}
+}
+
+func (c *Context) Next() {
+	c.index++
+	s := len(c.handlers)
+	for ; c.index < s; c.index++ {
+		c.handlers[c.index](c)
 	}
 }
 
@@ -68,8 +87,16 @@ func (c *Context) Data(code int, data []byte) {
 	c.Writer.Write(data)
 }
 
-func (c *Context) HTML(code int, html string) {
-	c.StatusCode = code
+func (c *Context) HTML(code int, html string) { //name string, data interface{},
 	c.SetHeader("Content-Type", "text/html")
+	c.StatusCode = code
+	//if err := c.engine.htmlTemplates.ExecuteTemplate(c.Writer, name, data); err != nil {
+	//	c.Fail(500, err.Error())
+	//}
 	c.Writer.Write([]byte(html))
+}
+
+func (c *Context) Fail(code int, err string) {
+	c.index = len(c.handlers)
+	c.JSON(code, H{"message": err})
 }
