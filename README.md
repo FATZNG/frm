@@ -1,2 +1,2 @@
 # frm
-learn go with geektutu
+learn go from geektutu
